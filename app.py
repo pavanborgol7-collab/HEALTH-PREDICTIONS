@@ -162,3 +162,4 @@ st.markdown(
     "<p style='text-align:center;color:#8fa3b0'>Built with Streamlit · Random Forest · UCI Heart Disease dataset</p>",
     unsafe_allow_html=True,
 )
+
