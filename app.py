@@ -1,262 +1,164 @@
-import streamlit as st
-import pandas as pd
-import joblib
-import os
+"""
+Heart Disease Prediction App — Streamlit
+Run:  streamlit run app.py
+"""
 
-# --------------------------------------------------
-# PAGE CONFIGURATION
-# --------------------------------------------------
+import numpy as np
+import pandas as pd
+import streamlit as st
 
 st.set_page_config(
-    page_title="Heart Disease Prediction",
+    page_title="Heart Disease Predictor",
     page_icon="❤️",
     layout="wide",
-    initial_sidebar_state="expanded"
 )
 
-# --------------------------------------------------
-# LOAD MODEL
-# --------------------------------------------------
-
-MODEL_PATH = "heart_disease_model.pkl"
-
-
-@st.cache_resource
-def load_model(path: str):
-    if not os.path.exists(path):
-        return None
-    return joblib.load(path)
-
-
-model = load_model(MODEL_PATH)
-
-if model is None:
-    st.error(
-        f"⚠️ Could not find `{MODEL_PATH}`. Place the trained pipeline "
-        "(preprocessor + RandomForestClassifier) in the same folder as this script."
-    )
-    st.stop()
-
-# --------------------------------------------------
-# HEADER
-# --------------------------------------------------
-
-st.title("❤️ Heart Disease Prediction Dashboard")
-
+# ---------- Custom HTML/CSS ----------
 st.markdown(
     """
-    ### Machine Learning Prediction System
-    Enter the patient's medical information below to generate
-    a prediction using a **Random Forest classification model**.
-    """
+    <style>
+    .stApp { background: linear-gradient(135deg, #0f2027, #203a43, #2c5364); }
+    h1, h2, h3, p, label, .stMarkdown { color: #f5f7fa !important; }
+    .hero {
+        text-align: center; padding: 2rem 1rem 1rem 1rem;
+    }
+    .hero h1 { font-size: 2.8rem; margin-bottom: 0.2rem; }
+    .hero p { color: #b8c6d1 !important; font-size: 1.1rem; }
+    .card {
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 16px; padding: 1.5rem; margin-bottom: 1rem;
+        backdrop-filter: blur(6px);
+    }
+    .result-ok {
+        background: linear-gradient(135deg, #11998e, #38ef7d);
+        border-radius: 16px; padding: 2rem; text-align: center;
+        color: white; font-size: 1.4rem; font-weight: 700;
+    }
+    .result-risk {
+        background: linear-gradient(135deg, #cb2d3e, #ef473a);
+        border-radius: 16px; padding: 2rem; text-align: center;
+        color: white; font-size: 1.4rem; font-weight: 700;
+    }
+    .stButton > button {
+        background: linear-gradient(135deg, #ef473a, #cb2d3e);
+        color: white; border: none; border-radius: 12px;
+        padding: 0.7rem 2rem; font-size: 1.1rem; font-weight: 600;
+        width: 100%;
+    }
+    .stButton > button:hover { opacity: 0.9; color: white; }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
-st.divider()
+# ---------- Load model ----------
+@st.cache_resource
+def load_model():
+    # Train from CSV at startup — no saved model file needed
+    from sklearn.ensemble import RandomForestClassifier
+    df = pd.read_csv("heart_disease_health_data.csv").dropna()
+    features = [
+        "age", "sex", "cp", "trestbps", "chol", "fbs", "restecg",
+        "thalach", "exang", "oldpeak", "slope", "ca", "thal",
+    ]
+    model = RandomForestClassifier(n_estimators=200, max_depth=8, random_state=42)
+    model.fit(df[features], df["target"])
+    return {"model": model, "features": features}
 
-# --------------------------------------------------
-# SIDEBAR
-# --------------------------------------------------
+bundle = load_model()
+model, FEATURES = bundle["model"], bundle["features"]
 
-with st.sidebar:
-    st.header("📋 About")
+# ---------- Hero ----------
+st.markdown(
+    """
+    <div class="hero">
+        <h1>❤️ Heart Disease Predictor</h1>
+        <p>Random Forest model trained on the UCI Heart Disease dataset (303 real patient records)</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
-    st.info(
-        "Enter the patient's clinical information carefully. "
-        "The model will process the values through the same "
-        "preprocessing pipeline used during training."
-    )
+# ---------- Input form ----------
+left, right = st.columns([2, 1])
 
-    st.markdown("---")
+with left:
+    st.subheader("Enter patient details")
 
-    st.caption("Model")
-    st.write("🌲 Random Forest Classifier")
-
-    st.caption("Preprocessing")
-    st.write("StandardScaler (numeric) + OneHotEncoder (categorical)")
-
-    st.markdown("---")
-
-    st.caption(
-        "⚠️ This application is for educational purposes only "
-        "and must **not** be used as a real medical diagnosis. "
-        "Always consult a qualified physician."
-    )
-
-# --------------------------------------------------
-# INPUT FORM
-# --------------------------------------------------
-# NOTE: option codes below match the exact values the model was
-# trained on (Cleveland heart-disease dataset conventions).
-
-with st.form("patient_form"):
-
-    st.subheader("👤 Patient Details")
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        age = st.number_input("Age", min_value=1, max_value=120, value=50)
-
-    with col2:
-        sex = st.selectbox(
-            "Sex",
-            options=[0, 1],
-            format_func=lambda x: "Female" if x == 0 else "Male",
-        )
-
-    with col3:
+    c1, c2 = st.columns(2)
+    with c1:
+        age = st.slider("Age", 20, 90, 50)
+        sex = st.selectbox("Sex", [("Male", 1), ("Female", 0)], format_func=lambda x: x[0])[1]
         cp = st.selectbox(
-            "Chest Pain Type",
-            options=[1, 2, 3, 4],
-            format_func=lambda x: {
-                1: "1 – Typical angina",
-                2: "2 – Atypical angina",
-                3: "3 – Non-anginal pain",
-                4: "4 – Asymptomatic",
-            }[x],
-            help="Type of chest pain experienced by the patient.",
-        )
-
-    st.subheader("🩺 Vital & Blood Information")
-    col4, col5, col6 = st.columns(3)
-
-    with col4:
-        trestbps = st.number_input(
-            "Resting Blood Pressure (mm Hg)",
-            min_value=50, max_value=250, value=120,
-        )
-
-    with col5:
-        chol = st.number_input(
-            "Serum Cholesterol (mg/dl)",
-            min_value=50, max_value=700, value=200,
-        )
-
-    with col6:
-        fbs = st.selectbox(
-            "Fasting Blood Sugar > 120 mg/dl",
-            options=[0, 1],
-            format_func=lambda x: "No" if x == 0 else "Yes",
-        )
-
-    st.subheader("📈 Exercise Test Results")
-    col7, col8, col9 = st.columns(3)
-
-    with col7:
-        thalach = st.number_input(
-            "Max Heart Rate Achieved",
-            min_value=50, max_value=250, value=150,
-        )
-
-    with col8:
-        exang = st.selectbox(
-            "Exercise Induced Angina",
-            options=[0, 1],
-            format_func=lambda x: "No" if x == 0 else "Yes",
-        )
-
-    with col9:
-        oldpeak = st.number_input(
-            "ST Depression (oldpeak)",
-            min_value=0.0, max_value=10.0, value=1.0, step=0.1,
-        )
-
-    col10, col11, col12 = st.columns(3)
-
-    with col10:
+            "Chest pain type",
+            [(0, "Typical angina"), (1, "Atypical angina"),
+             (2, "Non-anginal pain"), (3, "Asymptomatic")],
+            format_func=lambda x: x[1],
+        )[0]
+        trestbps = st.slider("Resting blood pressure (mm Hg)", 80, 220, 120)
+        chol = st.slider("Cholesterol (mg/dl)", 100, 600, 200)
+        fbs = st.selectbox("Fasting blood sugar > 120 mg/dl", [("No", 0), ("Yes", 1)], format_func=lambda x: x[0])[1]
         restecg = st.selectbox(
-            "Resting ECG Results",
-            options=[0, 1, 2],
-            format_func=lambda x: {
-                0: "0 – Normal",
-                1: "1 – ST-T wave abnormality",
-                2: "2 – Left ventricular hypertrophy",
-            }[x],
-        )
-
-    with col11:
+            "Resting ECG",
+            [(0, "Normal"), (1, "ST-T wave abnormality"), (2, "LV hypertrophy")],
+            format_func=lambda x: x[1],
+        )[0]
+    with c2:
+        thalach = st.slider("Max heart rate achieved", 60, 220, 150)
+        exang = st.selectbox("Exercise-induced angina", [("No", 0), ("Yes", 1)], format_func=lambda x: x[0])[1]
+        oldpeak = st.number_input("ST depression (oldpeak)", 0.0, 7.0, 1.0, 0.1)
         slope = st.selectbox(
-            "Slope of Peak Exercise ST Segment",
-            options=[1, 2, 3],
-            format_func=lambda x: {
-                1: "1 – Upsloping",
-                2: "2 – Flat",
-                3: "3 – Downsloping",
-            }[x],
-        )
-
-    with col12:
+            "Slope of peak exercise ST",
+            [(0, "Upsloping"), (1, "Flat"), (2, "Downsloping")],
+            format_func=lambda x: x[1],
+        )[0]
+        ca = st.selectbox("Major vessels colored by fluoroscopy (0–3)", [0, 1, 2, 3])
         thal = st.selectbox(
             "Thalassemia",
-            options=[3, 6, 7],
-            format_func=lambda x: {
-                3: "3 – Normal",
-                6: "6 – Fixed defect",
-                7: "7 – Reversible defect",
-            }[x],
+            [(1, "Normal"), (2, "Fixed defect"), (3, "Reversible defect")],
+            format_func=lambda x: x[1],
+        )[0]
+
+    predict = st.button("🔍 Predict")
+
+# ---------- Prediction ----------
+with right:
+    st.subheader("Prediction")
+
+    if predict:
+        row = pd.DataFrame(
+            [[age, sex, cp, trestbps, chol, fbs, restecg,
+              thalach, exang, oldpeak, slope, ca, thal]],
+            columns=FEATURES,
         )
+        pred = model.predict(row)[0]
+        proba = model.predict_proba(row)[0]
 
-    ca = st.selectbox(
-        "Number of Major Vessels Colored by Fluoroscopy (ca)",
-        options=[0, 1, 2, 3],
-    )
-
-    st.markdown("")
-    submitted = st.form_submit_button("🔍 Predict", use_container_width=True)
-
-# --------------------------------------------------
-# PREDICTION
-# --------------------------------------------------
-
-if submitted:
-    input_df = pd.DataFrame([{
-        "age": age,
-        "sex": sex,
-        "cp": cp,
-        "trestbps": trestbps,
-        "chol": chol,
-        "fbs": fbs,
-        "restecg": restecg,
-        "thalach": thalach,
-        "exang": exang,
-        "oldpeak": oldpeak,
-        "slope": slope,
-        "ca": ca,
-        "thal": thal,
-    }])
-
-    with st.expander("🔎 View input data sent to the model"):
-        st.dataframe(input_df, use_container_width=True)
-
-    try:
-        prediction = model.predict(input_df)[0]
-        proba = None
-        if hasattr(model, "predict_proba"):
-            proba = model.predict_proba(input_df)[0]
-    except Exception as e:
-        st.error(f"Prediction failed: {e}")
-        st.stop()
-
-    st.divider()
-    st.subheader("🧾 Prediction Result")
-
-    result_col, prob_col = st.columns([1, 1])
-
-    with result_col:
-        if prediction == 1:
-            st.error("### ⚠️ High risk of heart disease detected")
+        if pred == 1:
+            st.markdown(
+                f'<div class="result-risk">⚠️ High risk of heart disease<br>'
+                f'<span style="font-size:1rem">Confidence: {proba[1]*100:.1f}%</span></div>',
+                unsafe_allow_html=True,
+            )
         else:
-            st.success("### ✅ Low risk of heart disease detected")
+            st.markdown(
+                f'<div class="result-ok">✅ Low risk — likely healthy<br>'
+                f'<span style="font-size:1rem">Confidence: {proba[0]*100:.1f}%</span></div>',
+                unsafe_allow_html=True,
+            )
 
-    with prob_col:
-        if proba is not None:
-            # class order follows model.classes_
-            classes = list(model.classes_)
-            disease_idx = classes.index(1) if 1 in classes else 1
-            disease_prob = proba[disease_idx]
-            st.metric("Predicted probability of disease", f"{disease_prob * 100:.1f}%")
-            st.progress(min(max(disease_prob, 0.0), 1.0))
+        st.progress(float(proba[1]), text=f"Risk probability: {proba[1]*100:.1f}%")
+        st.caption("⚕️ Educational tool only — not medical advice.")
+    else:
+        st.info("Fill in the patient details and press **Predict**.")
 
-    st.caption(
-        "This result is generated by a machine learning model for educational "
-        "purposes and is **not** a substitute for professional medical advice."
-    )
+# ---------- Feature importance ----------
+st.subheader("What the model looks at")
+imp = pd.Series(model.feature_importances_, index=FEATURES).sort_values(ascending=True)
+st.bar_chart(imp, horizontal=True)
+
+st.markdown(
+    "<p style='text-align:center;color:#8fa3b0'>Built with Streamlit · Random Forest · UCI Heart Disease dataset</p>",
+    unsafe_allow_html=True,
+)
